@@ -5,9 +5,7 @@ from torchvision import transforms as T
 import t5
 from torch.nn.utils.rnn import pad_sequence
 
-from PIL import Image
-
-from datasets import load_dataset
+from PIL import Image, ImageDraw, ImageFont
 
 from diffusers.pipelines.pipeline_utils import DiffusionPipeline, ImagePipelineOutput
 from typing import List, Optional, Tuple, Union
@@ -141,7 +139,8 @@ class GlyffuserPipeline(DiffusionPipeline):
             # 2. compute previous image: x_t -> x_t-1
             image = self.scheduler.step(model_output, t, image, generator=generator, return_dict=False)[0]
 
-        image = (image / 2 + 0.5).clamp(0, 1)
+        # image = (image / 2 + 0.5).clamp(0, 1)
+        image = image.clamp(0, 1) # No need to rescale for HF yuewu/glyffuser
         image = image.cpu().permute(0, 2, 3, 1).numpy()
         if output_type == "pil":
             image = self.numpy_to_pil(image)
@@ -172,3 +171,40 @@ def evaluate(config, epoch, texts, pipeline):
     test_dir = os.path.join(config.output_dir, "samples")
     os.makedirs(test_dir, exist_ok=True)
     image_grid.save(f"{test_dir}/{epoch:04d}.png")
+
+def make_labeled_grid(images, prompt, steps, font_path=None, font_size=20, margin=10):
+    assert len(images) == len(steps), "The number of images must match the number of steps"
+    
+    w, h = images[0].size
+    font = ImageFont.truetype(font_path, font_size) if font_path else ImageFont.load_default()
+    
+    # Calculate the height of the grid including the margin for text
+    total_height = h + margin + font_size
+    total_width = w * len(images)
+    grid_height = total_height + margin + font_size  # Add extra margin for the prompt
+    grid = Image.new('RGB', size=(total_width, grid_height), color=(255, 255, 255))
+
+    # Draw the text prompt at the top
+    draw = ImageDraw.Draw(grid)
+    prompt_text = f"Prompt: \"{prompt}\""
+    prompt_width, prompt_height = draw.textbbox((0, 0), prompt_text, font=font)[2:4]
+    prompt_x = (total_width - prompt_width) / 2
+    prompt_y = margin / 2
+    draw.text((prompt_x, prompt_y), prompt_text, fill="black", font=font)
+    
+    for i, (image, step) in enumerate(zip(images, steps)):
+        # Calculate position to paste the image
+        x = i * w
+        y = margin + font_size
+        
+        # Paste the image
+        grid.paste(image, box=(x, y))
+        
+        # Draw the step text
+        step_text = f"Steps: {step}"
+        text_width, text_height = draw.textbbox((0, 0), step_text, font=font)[2:4]
+        text_x = x + (w - text_width) / 2
+        text_y = y + h + margin / 2 - 8
+        draw.text((text_x, text_y), step_text, fill="black", font=font)
+
+    return grid
