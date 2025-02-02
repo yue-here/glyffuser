@@ -1,5 +1,5 @@
 # Glyffuser - text-to-image for Chinese glyphs
-See the blog post at https://yue-here.com/glyffuser for further details
+See the blog post at https://yue-here.com/posts/glyffuser for further details
 
 Run the "Unihan glyph generator.ipynb" notebook to generate a local dataset.
 
